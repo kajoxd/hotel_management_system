@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\ProcessBookingBatch;
+use App\Services\PmsApiClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +16,7 @@ class SyncPmsBookings extends Command
     private string $pmsBaseUrl;
     private int $batchSize;
 
-    public function __construct()
+    public function __construct(private readonly PmsApiClient $pmsClient)
     {
         parent::__construct();
 
@@ -37,6 +38,7 @@ class SyncPmsBookings extends Command
             foreach ($chunks as $chunk) {
                 ProcessBookingBatch::dispatch(
                     $chunk->toArray(),
+                    $this->pmsClient
                 );
             }
         } catch (\Exception $e) {
