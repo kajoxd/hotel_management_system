@@ -19,7 +19,6 @@ class BookingRepository
                 'room_type_id' => $dto->room_type_id,
                 'status' => $dto->status,
                 'notes' => $dto->notes,
-                'guest_ids' => $dto->guest_ids,
             ]
         );
     }

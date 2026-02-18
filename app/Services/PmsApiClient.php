@@ -28,7 +28,7 @@ class PmsApiClient
         $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new Exception("Failed to fetch booking details for ID {$bookingId}: " . $response->status());
+            throw new Exception("Failed to fetch booking details for ID {$bookingId}. Response status:" . $response->status());
         }
 
         return new BookingDTO($response->json());
@@ -44,7 +44,7 @@ class PmsApiClient
         $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new Exception("Failed to fetch room details for ID {$roomId}: ".$response->status());
+            throw new Exception("Failed to fetch room details for ID {$roomId}. Response status:" . $response->status());
         }
 
         return new RoomDTO($response->json());
@@ -60,7 +60,7 @@ class PmsApiClient
         $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new Exception("Failed to fetch room type details for ID {$roomTypeId}: ".$response->status());
+            throw new Exception("Failed to fetch room type details for ID {$roomTypeId}. Response status:" . $response->status());
         }
 
         return new RoomTypeDTO($response->json());
@@ -76,7 +76,7 @@ class PmsApiClient
         $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new Exception("Failed to fetch guest details for ID {$guestId}: ".$response->status());
+            throw new Exception("Failed to fetch guest details for ID {$guestId}. Response status:" . $response->status());
         }
 
         return new GuestDTO($response->json());
