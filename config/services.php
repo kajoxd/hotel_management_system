@@ -1,18 +1,11 @@
 <?php
 
 return [
-
-    /*
-    |--------------------------------------------------------------------------
-    | Third Party Services
-    |--------------------------------------------------------------------------
-    |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
-    |
-    */
+    'pms' => [
+        'api_base_url' => env('PMS_API_BASE_URL'),
+        'api_request_limit' => env('PMS_API_REQUEST_LIMIT'),
+        'booking_sync_batch_size' => env('PMS_BOOKING_SYNC_BATCH_SIZE'),
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
