@@ -2,59 +2,83 @@
 
 namespace App\Services;
 
+use App\DTOs\GuestDTO;
+use App\DTOs\RoomDTO;
+use App\DTOs\RoomTypeDTO;
+use Exception;
 use Illuminate\Support\Facades\Http;
 use App\DTOs\BookingDto;
 
 class PmsApiClient
 {
-    protected string $baseUrl;
+    protected string $pmsBaseUrl;
 
     public function __construct()
     {
-        $this->baseUrl = config('services.pms.api_base_url');
+        $this->pmsBaseUrl = config('services.pms.api_base_url');
     }
 
-    public function getBooking(int $bookingId): BookingDto
+    /**
+     * @throws Exception
+     */
+    public function fetchBooking(int $bookingId): BookingDto
     {
-        $response = Http::get("{$this->baseUrl}/api/bookings/{$bookingId}");
+        $apiUrl = $this->pmsBaseUrl . "/api/bookings/" . $bookingId;
+
+        $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new \Exception("Failed to fetch booking {$bookingId}");
+            throw new Exception("Failed to fetch booking details for ID {$bookingId}: " . $response->status());
         }
 
-        return new BookingDto($response->json());
+        return new BookingDTO($response->json());
     }
 
-    public function getRoom(int $roomId): array
+    /**
+     * @throws Exception
+     */
+    public function fetchRoom(int $roomId): RoomDTO
     {
-        $response = Http::get("{$this->baseUrl}/api/rooms/{$roomId}");
+        $apiUrl = $this->pmsBaseUrl."/api/rooms/" . $roomId;
+
+        $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new \Exception("Failed to fetch room {$roomId}");
+            throw new Exception("Failed to fetch room details for ID {$roomId}: ".$response->status());
         }
 
-        return $response->json();
+        return new RoomDTO($response->json());
     }
 
-    public function getRoomType(int $roomTypeId): array
+    /**
+     * @throws Exception
+     */
+    public function fetchRoomType(int $roomTypeId): RoomTypeDTO
     {
-        $response = Http::get("{$this->baseUrl}/api/room-types/{$roomTypeId}");
+        $apiUrl = $this->pmsBaseUrl."/api/room-types/" . $roomTypeId;
+
+        $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new \Exception("Failed to fetch room type {$roomTypeId}");
+            throw new Exception("Failed to fetch room type details for ID {$roomTypeId}: ".$response->status());
         }
 
-        return $response->json();
+        return new RoomTypeDTO($response->json());
     }
 
-    public function getGuest(int $guestId): array
+    /**
+     * @throws Exception
+     */
+    public function fetchGuest(int $guestId): GuestDTO
     {
-        $response = Http::get("{$this->baseUrl}/api/guests/{$guestId}");
+        $apiUrl = $this->pmsBaseUrl."/api/guests/" . $guestId;
+
+        $response = Http::get($apiUrl);
 
         if (!$response->successful()) {
-            throw new \Exception("Failed to fetch guest {$guestId}");
+            throw new Exception("Failed to fetch guest details for ID {$guestId}: ".$response->status());
         }
 
-        return $response->json();
+        return new GuestDTO($response->json());
     }
 }
