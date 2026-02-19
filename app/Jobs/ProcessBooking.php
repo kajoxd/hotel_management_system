@@ -21,54 +21,51 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ProcessBookingBatch implements ShouldQueue
+class ProcessBooking implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     private int $pmsApiRequestLimit;
     private float $lastRequestTime = 0;
+    public $tries = 3;
+    public $backoff = 60;
 
-    public function __construct(private readonly array        $bookingsBatch,
+    public function __construct(private readonly int          $bookingId,
                                 private readonly PmsApiClient $pmsClient,
     )
     {
         $this->pmsApiRequestLimit = config('services.pms.api_request_limit');
     }
 
-    public function handle(): void
-    {
-        foreach ($this->bookingsBatch as $bookingId) {
-            try {
-                $this->processBooking($bookingId);
-            } catch (Exception $e) {
-                Log::error('Error processing booking', [
-                    'booking_id' => $bookingId,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
-    }
-
     /**
      * @throws Exception
      */
-    private function processBooking(int $bookingId): void
+    public function handle(): void
     {
-        DB::transaction(function () use ($bookingId) {
-            $this->rateLimitRequest();
-            $bookingDto = $this->pmsClient->fetchBooking($bookingId);
+        try {
+            DB::transaction(function () {
+                $this->rateLimitRequest();
+                $bookingDto = $this->pmsClient->fetchBooking($this->bookingId);
 
-            $this->persistRoomType($bookingDto->room_type_id);
-            $this->persistRoom($bookingDto->room_id);
+                $this->persistRoomType($bookingDto->room_type_id);
+                $this->persistRoom($bookingDto->room_id);
 
-            foreach ($bookingDto->guest_ids as $guestId) {
-                $this->persistGuest($guestId);
-            }
+                foreach ($bookingDto->guest_ids as $guestId) {
+                    $this->persistGuest($guestId);
+                }
 
-            $booking = $this->persistBooking($bookingDto);
+                $booking = $this->persistBooking($bookingDto);
 
-            $booking->guests()->sync($bookingDto->guest_ids);
-        });
+                $booking->guests()->sync($bookingDto->guest_ids);
+            });
+        } catch (Exception $e) {
+            Log::error('Error processing booking', [
+                'booking_id' => $this->bookingId,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
     }
 
     /**

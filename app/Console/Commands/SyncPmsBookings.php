@@ -2,11 +2,12 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\ProcessBookingBatch;
+use App\Jobs\ProcessBooking;
 use App\Models\SyncState;
 use App\Services\PmsApiClient;
 use Exception;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
 
@@ -14,13 +15,10 @@ class SyncPmsBookings extends Command
 {
     protected $signature = 'app:sync-pms-bookings {--full}';
     protected $description = 'Sync bookings from the PMS API';
-    private int $batchSize;
 
     public function __construct(private readonly PmsApiClient $pmsClient)
     {
         parent::__construct();
-
-        $this->batchSize = config('services.pms.booking_sync_batch_size');
     }
 
     public function handle()
@@ -34,11 +32,9 @@ class SyncPmsBookings extends Command
 
             $this->info("Found {$bookingIds->count()} bookings to sync");
 
-            $chunks = $bookingIds->chunk($this->batchSize);
-
-            foreach ($chunks as $chunk) {
-                ProcessBookingBatch::dispatch(
-                    $chunk->toArray(),
+            foreach ($bookingIds as $bookingId) {
+                ProcessBooking::dispatch(
+                    $bookingId,
                     $this->pmsClient
                 );
             }
