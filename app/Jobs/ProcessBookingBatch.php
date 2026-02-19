@@ -18,6 +18,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessBookingBatch implements ShouldQueue
@@ -53,22 +54,21 @@ class ProcessBookingBatch implements ShouldQueue
      */
     private function processBooking(int $bookingId): void
     {
-        $this->rateLimitRequest();
-        $bookingDto = $this->pmsClient->fetchBooking($bookingId);
+        DB::transaction(function () use ($bookingId) {
+            $this->rateLimitRequest();
+            $bookingDto = $this->pmsClient->fetchBooking($bookingId);
 
-        $booking = $this->persistBooking($bookingDto);
+            $this->persistRoomType($bookingDto->room_type_id);
+            $this->persistRoom($bookingDto->room_id);
 
-        $this->persistRoom($bookingDto->room_id);
-
-        $this->persistRoomType($bookingDto->room_type_id);
-
-        if (!empty($bookingDto->guest_ids)) {
-            foreach ($bookingDto->guest_ids as $guest) {
-                $this->persistGuest($guest);
+            foreach ($bookingDto->guest_ids as $guestId) {
+                $this->persistGuest($guestId);
             }
 
+            $booking = $this->persistBooking($bookingDto);
+
             $booking->guests()->sync($bookingDto->guest_ids);
-        }
+        });
     }
 
     /**
