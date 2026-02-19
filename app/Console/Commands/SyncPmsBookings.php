@@ -3,9 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Jobs\ProcessBookingBatch;
+use App\Models\SyncState;
 use App\Services\PmsApiClient;
+use Exception;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
 
@@ -13,20 +14,20 @@ class SyncPmsBookings extends Command
 {
     protected $signature = 'app:sync-pms-bookings {--full}';
     protected $description = 'Sync bookings from the PMS API';
-    private string $pmsBaseUrl;
     private int $batchSize;
 
     public function __construct(private readonly PmsApiClient $pmsClient)
     {
         parent::__construct();
 
-        $this->pmsBaseUrl = config('services.pms.api_base_url');
         $this->batchSize = config('services.pms.booking_sync_batch_size');
     }
 
     public function handle()
     {
         $this->info('Starting PMS bookings sync...');
+
+        $syncStartedAt = now();
 
         try {
             $bookingIds = $this->fetchAllBookingIds();
@@ -41,7 +42,11 @@ class SyncPmsBookings extends Command
                     $this->pmsClient
                 );
             }
-        } catch (\Exception $e) {
+
+            if (!$this->option('full')) {
+                SyncState::setCursor('bookings', $syncStartedAt);
+            }
+        } catch (Exception $e) {
             $this->error('Error syncing PMS bookings: ' . $e->getMessage());
             Log::error('PMS Bookings Sync Error', [
                 'message' => $e->getMessage(),
@@ -54,18 +59,21 @@ class SyncPmsBookings extends Command
         return 0;
     }
 
+    /**
+     * @throws Exception
+     */
     private function fetchAllBookingIds(): Collection
     {
-        $apiUrl = $this->pmsBaseUrl . "/api/bookings";
+        if (!$this->option('full')) {
+            $lastSync = SyncState::getCursor('bookings');
 
-        $response = Http::get($apiUrl);
+            if ($lastSync) {
+                $lastSync = $lastSync->subMinutes(2);
 
-        if (!$response->successful()) {
-            throw new \Exception("Failed to fetch. Status code: " . $response->status());
+                return $this->pmsClient->fetchAllBookings($lastSync);
+            }
         }
 
-        $data = $response->json('data', []);
-
-        return collect($data);
+        return $this->pmsClient->fetchAllBookings();
     }
 }

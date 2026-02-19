@@ -5,7 +5,9 @@ namespace App\Services;
 use App\DTOs\GuestDTO;
 use App\DTOs\RoomDTO;
 use App\DTOs\RoomTypeDTO;
+use Carbon\CarbonInterface;
 use Exception;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use App\DTOs\BookingDto;
 
@@ -80,5 +82,29 @@ class PmsApiClient
         }
 
         return new GuestDTO($response->json());
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function fetchAllBookings(?CarbonInterface $updatedAt = null): Collection
+    {
+        $apiUrl = $this->pmsBaseUrl."/api/bookings";
+
+        if ($updatedAt instanceof CarbonInterface) {
+            $response = Http::get($apiUrl, [
+                'updated_at.gt' => $updatedAt->toISOString(),
+            ]);
+        } else {
+            $response = Http::get($apiUrl);
+        }
+
+        if (!$response->successful()) {
+            throw new Exception("Failed to fetch bookings. Response status: ".$response->status());
+        }
+
+        $data = $response->json('data', []);
+
+        return collect($data);
     }
 }
