@@ -12,6 +12,7 @@ use App\Repositories\GuestRepository;
 use App\Repositories\RoomRepository;
 use App\Repositories\RoomTypeRepository;
 use App\Services\PmsApiClient;
+use App\Services\PmsRateLimiter;
 use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,16 +26,15 @@ class ProcessBooking implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    private int $pmsApiRequestLimit;
-    private float $lastRequestTime = 0;
     public $tries = 3;
     public $backoff = 60;
 
-    public function __construct(private readonly int          $bookingId,
-                                private readonly PmsApiClient $pmsClient,
+    public function __construct(
+        private readonly int            $bookingId,
+        private readonly PmsApiClient   $pmsClient,
+        private readonly PmsRateLimiter $rateLimiter,
     )
     {
-        $this->pmsApiRequestLimit = config('services.pms.api_request_limit');
     }
 
     /**
@@ -44,7 +44,8 @@ class ProcessBooking implements ShouldQueue
     {
         try {
             DB::transaction(function () {
-                $this->rateLimitRequest();
+                $this->rateLimiter->throttle();
+
                 $bookingDto = $this->pmsClient->fetchBooking($this->bookingId);
 
                 $this->persistRoomType($bookingDto->room_type_id);
@@ -89,7 +90,7 @@ class ProcessBooking implements ShouldQueue
             return;
         }
 
-        $this->rateLimitRequest();
+        $this->rateLimiter->throttle();
 
         $roomDTO = $this->pmsClient->fetchRoom($roomId);
         $repository = new RoomRepository();
@@ -108,7 +109,7 @@ class ProcessBooking implements ShouldQueue
             return;
         }
 
-        $this->rateLimitRequest();
+        $this->rateLimiter->throttle();
 
         $roomTypeDTO = $this->pmsClient->fetchRoomType($roomTypeId);
         $repository = new RoomTypeRepository();
@@ -127,7 +128,7 @@ class ProcessBooking implements ShouldQueue
             return;
         }
 
-        $this->rateLimitRequest();
+        $this->rateLimiter->throttle();
 
         $guestDTO = $this->pmsClient->fetchGuest($guestId);
         $repository = new GuestRepository();
@@ -135,17 +136,11 @@ class ProcessBooking implements ShouldQueue
         $repository->saveFromDto($guestDTO);
     }
 
-    private function rateLimitRequest(): void
-   {
-       $currentTime = microtime(true);
-       $timeSinceLastRequest = $currentTime - $this->lastRequestTime;
-       $minimumInterval = 1 / $this->pmsApiRequestLimit;
-
-       if ($timeSinceLastRequest < $minimumInterval) {
-           $sleepMicroseconds = ($minimumInterval - $timeSinceLastRequest) * 1000000;
-           usleep((int) $sleepMicroseconds);
-       }
-
-       $this->lastRequestTime = microtime(true);
-   }
+    public function failed(Exception $exception): void
+    {
+        Log::critical('Booking job permanently failed', [
+            'booking_id' => $this->bookingId,
+            'message' => $exception->getMessage()
+        ]);
+    }
 }

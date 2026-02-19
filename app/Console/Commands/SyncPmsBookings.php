@@ -5,9 +5,9 @@ namespace App\Console\Commands;
 use App\Jobs\ProcessBooking;
 use App\Models\SyncState;
 use App\Services\PmsApiClient;
+use App\Services\PmsRateLimiter;
 use Exception;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
 
@@ -16,7 +16,9 @@ class SyncPmsBookings extends Command
     protected $signature = 'app:sync-pms-bookings {--full}';
     protected $description = 'Sync bookings from the PMS API';
 
-    public function __construct(private readonly PmsApiClient $pmsClient)
+    public function __construct(private readonly PmsApiClient   $pmsClient,
+                                private readonly PmsRateLimiter $rateLimiter,
+    )
     {
         parent::__construct();
     }
@@ -33,10 +35,7 @@ class SyncPmsBookings extends Command
             $this->info("Found {$bookingIds->count()} bookings to sync");
 
             foreach ($bookingIds as $bookingId) {
-                ProcessBooking::dispatch(
-                    $bookingId,
-                    $this->pmsClient
-                );
+                ProcessBooking::dispatch($bookingId)->onQueue('pms');
             }
 
             if (!$this->option('full')) {
@@ -66,10 +65,12 @@ class SyncPmsBookings extends Command
             if ($lastSync) {
                 $lastSync = $lastSync->subMinutes(2);
 
+                $this->rateLimiter->throttle();
                 return $this->pmsClient->fetchAllBookings($lastSync);
             }
         }
 
+        $this->rateLimiter->throttle();
         return $this->pmsClient->fetchAllBookings();
     }
 }
