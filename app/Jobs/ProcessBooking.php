@@ -6,6 +6,7 @@ use App\DTOs\BookingDTO;
 use App\DTOs\GuestDto;
 use App\DTOs\RoomDto;
 use App\DTOs\RoomTypeDto;
+use App\Helpers\BookingSyncCache;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -21,6 +22,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -97,6 +99,8 @@ class ProcessBooking implements ShouldQueue
 
             throw $e;
         }
+
+        BookingSyncCache::incrementSuccess();
     }
 
     /**
@@ -175,5 +179,7 @@ class ProcessBooking implements ShouldQueue
             'booking_id' => $this->bookingId,
             'message' => $exception->getMessage()
         ]);
+
+        BookingSyncCache::incrementFailed();
     }
 }
