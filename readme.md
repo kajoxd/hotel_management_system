@@ -37,5 +37,5 @@ php artisan sync:pms-bookings
 ## 5. Start the Queue Worker
 To process queued jobs (e.g., background syncing), start the queue worker:
 ``` bash
-php artisan queue:work
+php artisan queue:work --queue=pms
 ```
