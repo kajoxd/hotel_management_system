@@ -32,7 +32,7 @@ php artisan migrate
 ## 4. Sync Bookings Using Artisan Command
 Run the sync command to retrieve bookings and related data from the PMS API:
 ``` bash
-php artisan sync:pms-bookings
+php artisan app:sync-pms-bookings 
 ```
 ## 5. Start the Queue Worker
 To process queued jobs (e.g., background syncing), start the queue worker:
