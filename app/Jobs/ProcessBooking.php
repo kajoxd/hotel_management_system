@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
-use App\DTOs\BookingDto;
-use App\Models\Booking;
+use App\DTOs\BookingDTO;
+use App\DTOs\GuestDto;
+use App\DTOs\RoomDto;
+use App\DTOs\RoomTypeDto;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -28,11 +30,11 @@ class ProcessBooking implements ShouldQueue
 
     public $tries = 3;
     public $backoff = 60;
+    private PmsApiClient $pmsClient;
+    private PmsRateLimiter $rateLimiter;
 
     public function __construct(
-        private readonly int            $bookingId,
-        private readonly PmsApiClient   $pmsClient,
-        private readonly PmsRateLimiter $rateLimiter,
+        private readonly int $bookingId,
     )
     {
     }
@@ -40,29 +42,57 @@ class ProcessBooking implements ShouldQueue
     /**
      * @throws Exception
      */
-    public function handle(): void
+    public function handle(
+        PmsApiClient       $pmsClient,
+        PmsRateLimiter     $rateLimiter,
+        RoomTypeRepository $roomTypeRepository,
+        RoomRepository     $roomRepository,
+        GuestRepository    $guestRepository,
+        BookingRepository  $bookingRepository,
+    ): void
     {
+        $this->pmsClient = $pmsClient;
+        $this->rateLimiter = $rateLimiter;
+
         try {
-            DB::transaction(function () {
-                $this->rateLimiter->throttle();
+            $bookingDto = $this->fetchBooking($this->bookingId);
 
-                $bookingDto = $this->pmsClient->fetchBooking($this->bookingId);
+            $roomTypeDto = $this->fetchRoomType($bookingDto->room_type_id);
 
-                $this->persistRoomType($bookingDto->room_type_id);
-                $this->persistRoom($bookingDto->room_id);
+            $roomDto = $this->fetchRoom($bookingDto->room_id);
 
-                foreach ($bookingDto->guest_ids as $guestId) {
-                    $this->persistGuest($guestId);
+            $guestDtos = $this->getAllGuests($bookingDto->guest_ids);
+
+            DB::transaction(function () use (
+                $bookingRepository,
+                $guestRepository,
+                $roomRepository,
+                $roomTypeRepository,
+                $bookingDto,
+                $roomTypeDto,
+                $roomDto,
+                $guestDtos
+            ) {
+                if ($roomTypeDto) {
+                    $roomTypeRepository->saveFromDto($roomTypeDto);
                 }
 
-                $booking = $this->persistBooking($bookingDto);
+                if ($roomDto) {
+                    $roomRepository->saveFromDto($roomDto);
+                }
+
+                foreach ($guestDtos as $guestDto) {
+                    $guestRepository->saveFromDto($guestDto);
+                }
+
+                $booking = $bookingRepository->saveFromDto($bookingDto);
 
                 $booking->guests()->sync($bookingDto->guest_ids);
             });
         } catch (Exception $e) {
             Log::error('Error processing booking', [
                 'booking_id' => $this->bookingId,
-                'message' => $e->getMessage(),
+                'message'    => $e->getMessage(),
             ]);
 
             throw $e;
@@ -72,68 +102,71 @@ class ProcessBooking implements ShouldQueue
     /**
      * @throws Exception
      */
-    private function persistBooking(BookingDto $bookingDto): Booking
+    private function fetchBooking(int $bookingId): BookingDTO
     {
-        $repository = new BookingRepository();
+        $this->rateLimiter->throttle();
 
-        return $repository->saveFromDto($bookingDto);
+        return $this->pmsClient->fetchBooking($bookingId);
     }
 
     /**
      * @throws Exception
      */
-    private function persistRoom(int $roomId): void
+    private function fetchRoom(int $roomId): ?RoomDto
     {
-        $room = Room::find($roomId);
-
-        if ($room) {
-            return;
+        if (Room::find($roomId)) {
+            return null;
         }
 
         $this->rateLimiter->throttle();
 
-        $roomDTO = $this->pmsClient->fetchRoom($roomId);
-        $repository = new RoomRepository();
-
-        $repository->saveFromDto($roomDTO);
+        return $this->pmsClient->fetchRoom($roomId);
     }
 
     /**
      * @throws Exception
      */
-    private function persistRoomType(int $roomTypeId): void
+    private function fetchRoomType(int $roomTypeId): ?RoomTypeDto
     {
-        $roomType = RoomType::find($roomTypeId);
-
-        if ($roomType) {
-            return;
+        if (RoomType::find($roomTypeId)) {
+            return null;
         }
 
         $this->rateLimiter->throttle();
 
-        $roomTypeDTO = $this->pmsClient->fetchRoomType($roomTypeId);
-        $repository = new RoomTypeRepository();
-
-        $repository->saveFromDto($roomTypeDTO);
+        return $this->pmsClient->fetchRoomType($roomTypeId);
     }
 
     /**
      * @throws Exception
      */
-    private function persistGuest(int $guestId): void
+    private function fetchGuest(int $guestId): ?GuestDto
     {
-        $guest = Guest::find($guestId);
-
-        if ($guest) {
-            return;
+        if (Guest::find($guestId)) {
+            return null;
         }
 
         $this->rateLimiter->throttle();
 
-        $guestDTO = $this->pmsClient->fetchGuest($guestId);
-        $repository = new GuestRepository();
+        return $this->pmsClient->fetchGuest($guestId);
+    }
 
-        $repository->saveFromDto($guestDTO);
+    /**
+     * @throws Exception
+     */
+    private function getAllGuests(array $guests): array
+    {
+        $guestDtos = [];
+
+        foreach ($guests as $guestId) {
+            $dto = $this->fetchGuest($guestId);
+
+            if ($dto) {
+                $guestDtos[] = $dto;
+            }
+        }
+
+        return $guestDtos;
     }
 
     public function failed(Exception $exception): void
